@@ -87,8 +87,7 @@ jobs:
         packer validate \
           -var "version=${{ steps.version.outputs.VERSION }}" \
           -var "vagrant_cloud_username=${{ vars.VAGRANT_CLOUD_USERNAME }}" \
-          -var "vagrant_cloud_token=${{ secrets.VAGRANT_CLOUD_TOKEN }}" \
-          ubuntu22.pkr.hcl
+          -var "vagrant_cloud_token=${{ secrets.VAGRANT_CLOUD_TOKEN }}" .
 
     - name: Initialize Packer plugins
       working-directory: packer
@@ -106,8 +105,7 @@ jobs:
           -var "version=${{ steps.version.outputs.VERSION }}" \
           -var "vagrant_cloud_username=${{ vars.VAGRANT_CLOUD_USERNAME }}" \
           -var "vagrant_cloud_token=${{ secrets.VAGRANT_CLOUD_TOKEN }}" \
-          -var "headless=true" \
-          ubuntu22.pkr.hcl
+          -var "headless=true" .
         
         # Set output for the box file name
         BOX_FILE="virtualbox-${{ env.BOX_NAME }}-${{ steps.version.outputs.VERSION }}.box"
