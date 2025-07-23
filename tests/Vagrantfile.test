@@ -1,0 +1,99 @@
+# tests/Vagrantfile.test
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  # Configuration de base
+  config.vm.box = "test-box"
+  config.vm.hostname = "test-ubuntu2204"
+  
+  # Configuration réseau
+  config.vm.network "private_network", type: "dhcp"
+  config.vm.network "forwarded_port", guest: 22, host: 2222, id: "ssh"
+  config.vm.network "forwarded_port", guest: 80, host: 8080
+  config.vm.network "forwarded_port", guest: 3000, host: 3000
+  config.vm.network "forwarded_port", guest: 8000, host: 8000
+  
+  # Configuration du provider VirtualBox
+  config.vm.provider "virtualbox" do |vb|
+    vb.name = "test-ubuntu2204"
+    vb.memory = "2048"
+    vb.cpus = 2
+    vb.gui = false
+    
+    # Optimisations VirtualBox
+    vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+    vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+    vb.customize ["modifyvm", :id, "--nictype1", "virtio"]
+    vb.customize ["modifyvm", :id, "--audio", "none"]
+    vb.customize ["modifyvm", :id, "--clipboard-mode", "bidirectional"]
+    vb.customize ["modifyvm", :id, "--draganddrop", "bidirectional"]
+  end
+  
+  # Synchronisation des dossiers
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  config.vm.synced_folder "../", "/host", type: "virtualbox"
+  
+  # Configuration SSH
+  config.ssh.insert_key = false
+  config.ssh.forward_agent = true
+  
+  # Tests de provisioning
+  config.vm.provision "shell", inline: <<-SHELL
+    echo "=== Test de la configuration de base ==="
+    
+    # Test des utilisateurs
+    echo "Test utilisateur vagrant..."
+    id vagrant || exit 1
+    
+    # Test sudo sans mot de passe
+    echo "Test sudo sans mot de passe..."
+    sudo -n true || exit 1
+    
+    # Test des packages installés
+    echo "Test des packages essentiels..."
+    which git || exit 1
+    which docker || exit 1
+    which docker-compose || exit 1
+    which node || exit 1
+    which npm || exit 1
+    which ansible || exit 1
+    
+    # Test Docker
+    echo "Test Docker..."
+    sudo systemctl is-active docker || exit 1
+    sudo docker run --rm hello-world || exit 1
+    
+    # Test des permissions Docker pour vagrant
+    echo "Test permissions Docker pour vagrant..."
+    groups vagrant | grep docker || exit 1
+    
+    # Test Node.js
+    echo "Test Node.js..."
+    node --version || exit 1
+    npm --version || exit 1
+    
+    # Test Ansible
+    echo "Test Ansible..."
+    ansible --version || exit 1
+    
+    # Test de l'accès internet
+    echo "Test connectivité internet..."
+    curl -s https://httpbin.org/ip || exit 1
+    
+    # Test des alias
+    echo "Test des alias bash..."
+    source /home/vagrant/.bashrc
+    alias | grep "alias ll=" || echo "Warning: alias ll not found"
+    
+    echo "=== Tous les tests sont passés avec succès ! ==="
+  SHELL
+  
+  # Test avancé avec Ansible
+  config.vm.provision "ansible_local" do |ansible|
+    ansible.playbook = "test-playbook.yml"
+    ansible.verbose = true
+    ansible.install = false
+    ansible.provisioning_path = "/vagrant"
+  end
+end

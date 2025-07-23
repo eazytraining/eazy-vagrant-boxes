@@ -1,0 +1,201 @@
+name: Build and Release Vagrant Box
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build'
+        required: true
+        default: '1.0.0'
+      force_publish:
+        description: 'Force publish to Vagrant Cloud'
+        type: boolean
+        required: false
+        default: false
+
+env:
+  PACKER_VERSION: "1.11.0"
+  BOX_NAME: "ubuntu2204"
+  HCP_CLIENT_ID: ${{ vars.HCP_CLIENT_ID }}
+  HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+      box-file: ${{ steps.build.outputs.BOX_FILE }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up version
+      id: version
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        elif [[ -f VERSION ]]; then
+          echo "VERSION=$(cat VERSION)" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=$(date +%Y.%m.%d)-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Configure HCP Authentication
+      run: |
+        echo "Setting up HCP authentication..."
+        export HCP_CLIENT_ID="${{ vars.HCP_CLIENT_ID }}"
+        export HCP_CLIENT_SECRET="${{ secrets.HCP_CLIENT_SECRET }}"
+
+    - name: Set up HashiCorp repository
+      run: |
+        wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+
+    - name: Install Packer
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y packer=${{ env.PACKER_VERSION }}-*
+
+    - name: Install VirtualBox
+      run: |
+        wget -O- https://www.virtualbox.org/download/oracle_vbox_2016.asc | sudo gpg --dearmor --yes --output /usr/share/keyrings/oracle-virtualbox-2016.gpg
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/oracle-virtualbox-2016.gpg] https://download.virtualbox.org/virtualbox/debian $(lsb_release -cs) contrib" | sudo tee /etc/apt/sources.list.d/virtualbox.list
+        sudo apt-get update
+        sudo apt-get install -y virtualbox-7.0
+
+    - name: Install Ansible
+      run: |
+        python3 -m pip install --upgrade pip
+        pip3 install ansible
+
+    - name: Validate Packer configuration
+      working-directory: packer
+      env:
+        HCP_CLIENT_ID: ${{ vars.HCP_CLIENT_ID }}
+        HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
+      run: |
+        packer validate \
+          -var "version=${{ steps.version.outputs.VERSION }}" \
+          -var "vagrant_cloud_username=${{ vars.VAGRANT_CLOUD_USERNAME }}" \
+          -var "vagrant_cloud_token=${{ secrets.VAGRANT_CLOUD_TOKEN }}" \
+          ubuntu22.pkr.hcl
+
+    - name: Initialize Packer plugins
+      working-directory: packer
+      run: packer init ubuntu22.pkr.hcl
+
+    - name: Build Vagrant box
+      id: build
+      working-directory: packer
+      env:
+        HCP_CLIENT_ID: ${{ vars.HCP_CLIENT_ID }}
+        HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
+      run: |
+        packer build \
+          -var "version=${{ steps.version.outputs.VERSION }}" \
+          -var "vagrant_cloud_username=${{ vars.VAGRANT_CLOUD_USERNAME }}" \
+          -var "vagrant_cloud_token=${{ secrets.VAGRANT_CLOUD_TOKEN }}" \
+          -var "headless=true" \
+          ubuntu22.pkr.hcl
+        
+        # Set output for the box file name
+        BOX_FILE="virtualbox-${{ env.BOX_NAME }}-${{ steps.version.outputs.VERSION }}.box"
+        echo "BOX_FILE=$BOX_FILE" >> $GITHUB_OUTPUT
+
+    - name: List build artifacts
+      run: |
+        echo "Build completed. Artifacts:"
+        ls -la packer/builds/
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: vagrant-box-${{ steps.version.outputs.VERSION }}
+        path: packer/builds/*.box
+        retention-days: 30
+
+    - name: Test Vagrant box locally
+      run: |
+        cd tests
+        vagrant box add test-box ../packer/builds/${{ steps.build.outputs.BOX_FILE }}
+        vagrant up
+        vagrant ssh -c "echo 'Box test successful'"
+        vagrant destroy -f
+        vagrant box remove test-box
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event.inputs.force_publish == 'true'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: vagrant-box-${{ needs.build.outputs.version }}
+        path: builds/
+
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ needs.build.outputs.version }}
+        body: |
+          # Ubuntu 22.04 Vagrant Box Release ${{ needs.build.outputs.version }}
+          
+          ## What's included:
+          - Ubuntu 22.04 LTS (latest)
+          - Docker & Docker Compose
+          - Node.js LTS
+          - Ansible
+          - Essential development tools
+          
+          ## Usage:
+          ```bash
+          vagrant box add ${{ vars.VAGRANT_CLOUD_USERNAME }}/${{ env.BOX_NAME }} --version ${{ needs.build.outputs.version }}
+          ```
+          
+          ## Built with:
+          - Packer ${{ env.PACKER_VERSION }}
+          - VirtualBox 7.0
+          - Cloud-init for faster provisioning
+        files: |
+          builds/${{ needs.build.outputs.box-file }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
+    - name: Publish to Vagrant Cloud
+      if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+      run: |
+        echo "Publishing to Vagrant Cloud..."
+        # Ici vous pouvez ajouter la logique de publication vers Vagrant Cloud
+        # en utilisant l'API Vagrant Cloud ou vagrant cloud CLI
+
+  cleanup:
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Cleanup workspace
+      run: |
+        echo "Cleaning up workspace..."
+        df -h
+        sudo rm -rf /tmp/packer* || true
+        sudo docker system prune -af || true
+        df -h

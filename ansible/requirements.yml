@@ -1,0 +1,21 @@
+---
+# ansible/requirements.yml
+
+# Collections Ansible Galaxy
+collections:
+  - name: community.general
+    version: ">=5.0.0"
+  - name: ansible.posix
+    version: ">=1.3.0"
+  - name: community.docker
+    version: ">=2.0.0"
+  - name: community.crypto
+    version: ">=2.0.0"
+
+# Rôles Ansible Galaxy (optionnel)
+roles:
+  # Exemple de rôles utiles
+  # - name: geerlingguy.docker
+  #   version: "4.2.0"
+  # - name: geerlingguy.nodejs
+  #   version: "6.1.0"
