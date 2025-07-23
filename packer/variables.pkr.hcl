@@ -4,7 +4,7 @@ variable "version" {
   description = "Version of the box"
   default     = "1.0.0"
 }
-
+##
 variable "box_name" {
   type        = string
   description = "Name of the Vagrant box"
