@@ -23,6 +23,7 @@ env:
   BOX_NAME: "ubuntu2204"
   HCP_CLIENT_ID: ${{ vars.HCP_CLIENT_ID }}
   HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
+  PACKER_GITHUB_API_TOKEN: ${{ secrets.PACKER_GITHUB_API_TOKEN }}
 
 jobs:
   build:
@@ -85,6 +86,7 @@ jobs:
       env:
         HCP_CLIENT_ID: ${{ vars.HCP_CLIENT_ID }}
         HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
+        PACKER_GITHUB_API_TOKEN: ${{ secrets.PACKER_GITHUB_API_TOKEN }}
       run: |
         
         packer validate \
@@ -99,6 +101,7 @@ jobs:
       env:
         HCP_CLIENT_ID: ${{ vars.HCP_CLIENT_ID }}
         HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
+        PACKER_GITHUB_API_TOKEN: ${{ secrets.PACKER_GITHUB_API_TOKEN }}
       run: |
         
         packer build \
@@ -178,6 +181,7 @@ jobs:
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        PACKER_GITHUB_API_TOKEN: ${{ secrets.PACKER_GITHUB_API_TOKEN }}
 
     - name: Publish to Vagrant Cloud
       if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
