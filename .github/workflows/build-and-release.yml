@@ -76,6 +76,9 @@ jobs:
       run: |
         python3 -m pip install --upgrade pip
         pip3 install ansible
+    - name: Initialize Packer plugins
+      working-directory: packer
+      run: packer init .
 
     - name: Validate Packer configuration
       working-directory: packer
@@ -89,10 +92,7 @@ jobs:
           -var "vagrant_cloud_username=${{ vars.VAGRANT_CLOUD_USERNAME }}" \
           -var "vagrant_cloud_token=${{ secrets.VAGRANT_CLOUD_TOKEN }}" .
 
-    - name: Initialize Packer plugins
-      working-directory: packer
-      run: packer init ubuntu22.pkr.hcl
-
+    
     - name: Build Vagrant box
       id: build
       working-directory: packer
