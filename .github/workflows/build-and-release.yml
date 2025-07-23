@@ -83,6 +83,7 @@ jobs:
         HCP_CLIENT_ID: ${{ vars.HCP_CLIENT_ID }}
         HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
       run: |
+        cd packer
         packer validate \
           -var "version=${{ steps.version.outputs.VERSION }}" \
           -var "vagrant_cloud_username=${{ vars.VAGRANT_CLOUD_USERNAME }}" \
@@ -91,7 +92,7 @@ jobs:
 
     - name: Initialize Packer plugins
       working-directory: packer
-      run: packer init ubuntu22.pkr.hcl
+      run: cd packer && packer init ubuntu22.pkr.hcl
 
     - name: Build Vagrant box
       id: build
@@ -100,6 +101,7 @@ jobs:
         HCP_CLIENT_ID: ${{ vars.HCP_CLIENT_ID }}
         HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
       run: |
+        cd packer/
         packer build \
           -var "version=${{ steps.version.outputs.VERSION }}" \
           -var "vagrant_cloud_username=${{ vars.VAGRANT_CLOUD_USERNAME }}" \
