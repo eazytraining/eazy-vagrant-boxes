@@ -1,1 +1,0 @@
-# eazy-vagrant-boxes
